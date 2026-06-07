@@ -177,7 +177,7 @@ export function initializeSockets(io: Server) {
     socket.on('request_ride', async (data, callback) => {
       if (user.role !== 'PASSENGER') return;
       try {
-        const { pickupLocation, dropoffLocation, scheduledAt } = data;
+        const { pickupLocation, pickupLat, pickupLng, dropoffLocation, dropoffLat, dropoffLng, scheduledAt } = data;
         
         if (scheduledAt) {
           const scheduledTime = new Date(scheduledAt).getTime();
@@ -194,7 +194,11 @@ export function initializeSockets(io: Server) {
           data: {
             passengerId: user.id,
             pickupLocation,
+            pickupLat,
+            pickupLng,
             dropLocation: dropoffLocation,
+            dropLat: dropoffLat,
+            dropLng: dropoffLng,
             scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
             status
           },

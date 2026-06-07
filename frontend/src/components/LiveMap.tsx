@@ -5,6 +5,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSocketStore } from '@/store/socketStore';
 import { useAuthStore } from '@/store/authStore';
+import RoutingMachine from './RoutingMachine';
 
 // Fix for default Leaflet markers in React
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -80,18 +81,19 @@ export default function LiveMap() {
           </Marker>
         ))}
 
-        {/* Render Active Ride Points (Static for now as string locations don't have lat/lng)
-            In a real app, you would geocode the pickupLocation string to coords.
-            For this demo, we'll just plot some placeholder markers if there's an active ride. */}
-        {activeRides.length > 0 && (
+        {/* Render Active Ride Points with True Geocoded Coordinates */}
+        {activeRides.length > 0 && activeRides[0].pickupLat && activeRides[0].dropLat && (
           <>
-            <Marker position={[29.8630, 77.8970]} icon={pickupIcon}>
+            <Marker position={[activeRides[0].pickupLat, activeRides[0].pickupLng]} icon={pickupIcon}>
               <Popup>Pickup: {activeRides[0].pickupLocation}</Popup>
             </Marker>
-            <Marker position={[29.8670, 77.8950]} icon={dropoffIcon}>
+            <Marker position={[activeRides[0].dropLat, activeRides[0].dropLng]} icon={dropoffIcon}>
               <Popup>Dropoff: {activeRides[0].dropLocation}</Popup>
             </Marker>
-            <Polyline positions={[[29.8630, 77.8970], [29.8670, 77.8950]]} color="#6366f1" weight={4} dashArray="5, 10" />
+            <RoutingMachine 
+              start={[activeRides[0].pickupLat, activeRides[0].pickupLng]} 
+              end={[activeRides[0].dropLat, activeRides[0].dropLng]} 
+            />
           </>
         )}
       </MapContainer>

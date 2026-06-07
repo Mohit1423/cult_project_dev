@@ -40,7 +40,20 @@ export default function PassengerDashboard() {
 
   const activeDriverCount = Object.keys(onlineDrivers).length;
 
-  const handleRequestRide = (e: React.FormEvent) => {
+  const geocodeAddress = async (address: string) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const handleRequestRide = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pickup || !dropoff) return;
     
@@ -59,10 +72,26 @@ export default function PassengerDashboard() {
     
     setIsRequesting(true);
     setError('');
+
+    toast.loading('Geocoding addresses...', { id: 'geocode' });
+    const pickupCoords = await geocodeAddress(pickup);
+    const dropoffCoords = await geocodeAddress(dropoff);
+    
+    if (!pickupCoords || !dropoffCoords) {
+      toast.dismiss('geocode');
+      setError('Could not locate these addresses on the map. Please try being more specific (e.g., add City name).');
+      setIsRequesting(false);
+      return;
+    }
+    toast.success('Addresses found!', { id: 'geocode' });
     
     socket.emit('request_ride', { 
       pickupLocation: pickup, 
+      pickupLat: pickupCoords.lat,
+      pickupLng: pickupCoords.lng,
       dropoffLocation: dropoff,
+      dropoffLat: dropoffCoords.lat,
+      dropoffLng: dropoffCoords.lng,
       scheduledAt: isScheduled ? scheduledDate : null 
     }, (res: any) => {
       if (res && res.success) {
