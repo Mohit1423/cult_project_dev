@@ -6,7 +6,18 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LogOut, Car, Power, PowerOff, MapPin, CheckCircle, Navigation, Loader2, Sparkles, Star, TrendingUp, History, IndianRupee, Activity } from 'lucide-react';
 import MapWrapper from '@/components/MapWrapper';
-import L from 'leaflet';
+
+// Pure math distance calculation to avoid Leaflet SSR window crash
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3;
+  const p1 = lat1 * Math.PI / 180;
+  const p2 = lat2 * Math.PI / 180;
+  const dp = (lat2 - lat1) * Math.PI / 180;
+  const dl = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 export default function DriverDashboard() {
   const { user, token, logout, isAuthenticated } = useAuthStore();
@@ -139,7 +150,7 @@ export default function DriverDashboard() {
                       {!ride.scheduledAt && (() => {
                         const myLoc = driverLocations[user.id];
                         const distanceMeters = myLoc && ride.pickupLat && ride.pickupLng 
-                          ? L.latLng(myLoc.lat, myLoc.lng).distanceTo(L.latLng(ride.pickupLat, ride.pickupLng)) 
+                          ? calculateDistance(myLoc.lat, myLoc.lng, ride.pickupLat, ride.pickupLng) 
                           : null;
                         const distanceText = distanceMeters ? (distanceMeters > 1000 ? `${(distanceMeters/1000).toFixed(1)} km to pickup` : `${Math.round(distanceMeters)}m to pickup`) : '';
                         
