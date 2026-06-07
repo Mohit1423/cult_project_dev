@@ -86,12 +86,12 @@ export const useSocketStore = create<SocketState>((set) => ({
     });
 
     socket.on('ride_accepted', (data) => {
-      set((state) => ({ activeRides: state.activeRides.map(r => r.id === data.rideId ? { ...r, status: 'IN_PROGRESS', driverId: data.driverId, driver: data.driver } : r) }));
+      set((state) => ({ activeRides: state.activeRides.map(r => r.id === data.id ? { ...r, status: 'IN_PROGRESS', driverId: data.driverId, driver: data.driver } : r) }));
       toast.success('A driver has accepted your ride!', { icon: '🚘' });
     });
 
     socket.on('ride_completed', (data) => {
-      set((state) => ({ activeRides: state.activeRides.map(r => r.id === data.rideId ? { ...r, status: 'COMPLETED' } : r) }));
+      set((state) => ({ activeRides: state.activeRides.map(r => r.id === data.id ? { ...r, status: 'COMPLETED' } : r) }));
       toast.success('Ride completed! You arrived at your destination.', { icon: '🏁' });
     });
 
