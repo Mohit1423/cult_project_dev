@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { api } from '../lib/api';
 
 export interface User {
@@ -17,28 +18,35 @@ interface AuthState {
   checkAuth: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  token: null,
-  isAuthenticated: false,
-  login: (token, user) => {
-    localStorage.setItem('token', token);
-    set({ user, token, isAuthenticated: true });
-  },
-  logout: () => {
-    localStorage.removeItem('token');
-    set({ user: null, token: null, isAuthenticated: false });
-  },
-  checkAuth: async () => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      try {
-        const res = await api.get('/auth/profile');
-        set({ user: res.data, token, isAuthenticated: true });
-      } catch (error) {
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      login: (token, user) => {
+        localStorage.setItem('token', token);
+        set({ user, token, isAuthenticated: true });
+      },
+      logout: () => {
         localStorage.removeItem('token');
         set({ user: null, token: null, isAuthenticated: false });
-      }
+      },
+      checkAuth: async () => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          try {
+            const res = await api.get('/auth/profile');
+            set({ user: res.data, token, isAuthenticated: true });
+          } catch (error) {
+            localStorage.removeItem('token');
+            set({ user: null, token: null, isAuthenticated: false });
+          }
+        }
+      },
+    }),
+    {
+      name: 'auth-storage',
     }
-  },
-}));
+  )
+);

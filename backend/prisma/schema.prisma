@@ -59,6 +59,7 @@ model Ride {
   dropLng         Float?
   fare            Float?
   requestedAt     DateTime   @default(now())
+  scheduledAt     DateTime?
   acceptedAt      DateTime?
   startedAt       DateTime?
   completedAt     DateTime?

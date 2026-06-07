@@ -4,15 +4,17 @@ import { useSocketStore } from '@/store/socketStore';
 import { socket } from '@/lib/socket';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LogOut, Car, Power, PowerOff, MapPin, CheckCircle, Navigation, Loader2, Sparkles } from 'lucide-react';
+import { LogOut, Car, Power, PowerOff, MapPin, CheckCircle, Navigation, Loader2, Sparkles, Star, TrendingUp, History, IndianRupee, Activity } from 'lucide-react';
+import MapWrapper from '@/components/MapWrapper';
 
 export default function DriverDashboard() {
   const { user, token, logout, isAuthenticated } = useAuthStore();
-  const { connect, disconnect, isConnected, incomingRides, activeRides, addActiveRide, removeActiveRide } = useSocketStore();
+  const { connect, disconnect, isConnected, incomingRides, activeRides, driverStats, addActiveRide, removeActiveRide } = useSocketStore();
   const router = useRouter();
   
   const [isOnline, setIsOnline] = useState(false);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [rejectedRides, setRejectedRides] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated) router.push('/login');
@@ -54,6 +56,10 @@ export default function DriverDashboard() {
     });
   };
 
+  const handleRejectRide = (rideId: string) => {
+    setRejectedRides(prev => [...prev, rideId]);
+  };
+
   if (!user) return null;
 
   return (
@@ -78,6 +84,22 @@ export default function DriverDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-6">
+            {driverStats && (
+              <div className="hidden md:flex gap-4 bg-black/20 px-4 py-2 rounded-2xl border border-white/5 text-sm">
+                <div>
+                  <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wider">Total Rides</p>
+                  <p className="font-black text-white">{driverStats.totalRides}</p>
+                </div>
+                <div className="w-px bg-white/10"></div>
+                <div>
+                  <p className="text-[10px] text-amber-400/70 font-bold uppercase tracking-wider">Avg Rating</p>
+                  <p className="font-black text-white flex items-center gap-1">
+                    {driverStats.averageRating.toFixed(1)} <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <div className="flex items-center gap-3 bg-black/20 px-5 py-2.5 rounded-full border border-white/5">
               <span className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]'}`}></span>
               <span className="text-sm font-bold text-slate-300 hidden sm:block tracking-wide">{isConnected ? 'System Online' : 'Reconnecting...'}</span>
@@ -106,11 +128,13 @@ export default function DriverDashboard() {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[40px]"></div>
                   
                   <div className="flex items-center justify-between mb-8">
-                    <div className="bg-emerald-500 w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(52,211,153,0.5)]">
-                      <CheckCircle className="w-8 h-8 text-white" />
+                    <div className={`${ride.scheduledAt ? 'bg-amber-500 shadow-[0_0_20px_rgba(251,191,36,0.5)]' : 'bg-emerald-500 shadow-[0_0_20px_rgba(52,211,153,0.5)]'} w-16 h-16 rounded-2xl flex items-center justify-center`}>
+                      {ride.scheduledAt ? <Navigation className="w-8 h-8 text-white" /> : <CheckCircle className="w-8 h-8 text-white" />}
                     </div>
-                    <div className="bg-emerald-500/20 border border-emerald-500/30 px-4 py-2 rounded-full">
-                      <span className="text-emerald-300 text-xs font-bold uppercase tracking-wider animate-pulse">In Progress</span>
+                    <div className={`${ride.scheduledAt ? 'bg-amber-500/20 border-amber-500/30' : 'bg-emerald-500/20 border-emerald-500/30'} border px-4 py-2 rounded-full`}>
+                      <span className={`${ride.scheduledAt ? 'text-amber-300' : 'text-emerald-300'} text-xs font-bold uppercase tracking-wider ${!ride.scheduledAt && 'animate-pulse'}`}>
+                        {ride.scheduledAt ? `UPCOMING: ${new Date(ride.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` : 'In Progress'}
+                      </span>
                     </div>
                   </div>
                   
@@ -162,11 +186,18 @@ export default function DriverDashboard() {
             </p>
           </div>
 
-          {/* Incoming Requests */}
-          <div className="lg:col-span-8 bg-white/5 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center tracking-wide">
-              <Navigation className="w-5 h-5 mr-3 text-indigo-400" /> Incoming Dispatches
-            </h2>
+          {/* Right Column: Map & Incoming Requests */}
+          <div className="lg:col-span-8 flex flex-col gap-8">
+            
+            {/* Live Map Box */}
+            <div className="w-full h-[350px] bg-slate-800/40 border border-white/10 rounded-[2rem] p-2 relative shadow-2xl overflow-hidden">
+              <MapWrapper />
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 shadow-2xl">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center tracking-wide">
+                <Navigation className="w-5 h-5 mr-3 text-indigo-400" /> Incoming Dispatches
+              </h2>
             
             {!isOnline ? (
               <div className="bg-black/20 border border-dashed border-white/10 rounded-[2rem] p-12 text-center text-slate-400 h-[300px] flex flex-col items-center justify-center">
@@ -174,7 +205,7 @@ export default function DriverDashboard() {
                 <p className="text-lg font-medium">You are offline.</p>
                 <p className="text-sm mt-2 text-slate-500">Go online to connect with passengers.</p>
               </div>
-            ) : incomingRides.length === 0 ? (
+            ) : incomingRides.filter(r => !rejectedRides.includes(r.id)).length === 0 ? (
               <div className="bg-indigo-900/10 border border-dashed border-indigo-500/30 rounded-[2rem] p-12 text-center h-[300px] flex flex-col items-center justify-center relative overflow-hidden">
                 <div className="relative w-20 h-20 mb-6 mx-auto">
                   <div className="absolute inset-0 bg-indigo-500 rounded-full animate-ping opacity-20"></div>
@@ -187,7 +218,7 @@ export default function DriverDashboard() {
               </div>
             ) : (
               <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                {incomingRides.map((ride) => (
+                {incomingRides.filter(r => !rejectedRides.includes(r.id)).map((ride) => (
                   <div key={ride.id} className="bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-xl border border-white/10 flex flex-col md:flex-row items-center justify-between animate-in slide-in-from-right-8 duration-300 gap-6 group hover:bg-white/15 transition-all">
                     <div className="flex-1 w-full">
                       <div className="flex items-start gap-4 mb-4">
@@ -197,27 +228,151 @@ export default function DriverDashboard() {
                           <p className="font-black text-white text-lg tracking-wide">{ride.pickupLocation}</p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-4">
-                        <div className="mt-1 bg-rose-500/20 p-2 rounded-full border border-rose-500/30"><MapPin className="w-4 h-4 text-rose-400" /></div>
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mb-1">Dropoff Location</p>
-                          <p className="font-black text-white text-lg tracking-wide">{ride.dropLocation}</p>
+                      
+                      {ride.status === 'SCHEDULED' && ride.scheduledAt ? (
+                        <div className="flex items-start gap-4 mb-4">
+                          <div className="mt-1 bg-amber-500/20 p-2 rounded-full border border-amber-500/30"><Navigation className="w-4 h-4 text-amber-400" /></div>
+                          <div>
+                            <p className="text-[10px] text-amber-400 font-bold uppercase tracking-[0.2em] mb-1">Scheduled For</p>
+                            <p className="font-black text-amber-300 text-lg tracking-wide">{new Date(ride.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="flex items-start gap-4">
+                          <div className="mt-1 bg-rose-500/20 p-2 rounded-full border border-rose-500/30"><MapPin className="w-4 h-4 text-rose-400" /></div>
+                          <div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mb-1">Dropoff Location</p>
+                            <p className="font-black text-white text-lg tracking-wide">{ride.dropLocation}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <button 
-                      onClick={() => handleAcceptRide(ride.id)}
-                      disabled={acceptingId === ride.id}
-                      className="w-full md:w-auto bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white px-8 py-5 rounded-xl font-black tracking-widest hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all disabled:opacity-50 min-w-[160px] flex justify-center transform hover:-translate-y-1"
-                    >
-                      {acceptingId === ride.id ? <Loader2 className="w-6 h-6 animate-spin" /> : 'ACCEPT RIDE'}
-                    </button>
+                    <div className="flex flex-col gap-3 w-full md:w-auto min-w-[160px]">
+                      <button 
+                        onClick={() => handleAcceptRide(ride.id)}
+                        disabled={acceptingId === ride.id}
+                        className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white px-8 py-4 rounded-xl font-black tracking-widest hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all disabled:opacity-50 flex justify-center transform hover:-translate-y-1"
+                      >
+                        {acceptingId === ride.id ? <Loader2 className="w-6 h-6 animate-spin" /> : 'ACCEPT RIDE'}
+                      </button>
+                      <button 
+                        onClick={() => handleRejectRide(ride.id)}
+                        disabled={acceptingId === ride.id}
+                        className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-8 py-3 rounded-xl font-bold tracking-widest transition-all text-sm"
+                      >
+                        REJECT
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+          </div>
         </div>
+
+        {/* Analytics Section */}
+        {driverStats && (
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-12">
+              <h2 className="text-2xl font-black text-white mb-6 flex items-center tracking-wide">
+                <Activity className="w-6 h-6 mr-3 text-emerald-400" /> Driver Analytics & History
+              </h2>
+            </div>
+            
+            {/* Summary Cards */}
+            <div className="lg:col-span-4 flex flex-col gap-6">
+              <div className="bg-gradient-to-br from-indigo-500/20 to-purple-600/20 backdrop-blur-xl border border-indigo-500/30 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden">
+                <div className="absolute right-[-20%] top-[-20%] w-32 h-32 bg-indigo-500/20 rounded-full blur-[40px]"></div>
+                <div className="bg-indigo-500/20 w-12 h-12 rounded-2xl flex items-center justify-center mb-4">
+                  <TrendingUp className="w-6 h-6 text-indigo-300" />
+                </div>
+                <p className="text-xs text-indigo-300 uppercase font-bold tracking-[0.2em] mb-1">Total Completed Rides</p>
+                <p className="text-5xl font-black text-white">{driverStats.totalRides}</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-amber-500/20 to-orange-600/20 backdrop-blur-xl border border-amber-500/30 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden">
+                <div className="absolute right-[-20%] top-[-20%] w-32 h-32 bg-amber-500/20 rounded-full blur-[40px]"></div>
+                <div className="bg-amber-500/20 w-12 h-12 rounded-2xl flex items-center justify-center mb-4">
+                  <Star className="w-6 h-6 text-amber-300" />
+                </div>
+                <p className="text-xs text-amber-300 uppercase font-bold tracking-[0.2em] mb-1">Average Rating</p>
+                <p className="text-5xl font-black text-white flex items-center gap-2">
+                  {driverStats.averageRating.toFixed(1)} <span className="text-xl text-amber-400/50">/ 5.0</span>
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-500/20 to-teal-600/20 backdrop-blur-xl border border-emerald-500/30 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden">
+                <div className="absolute right-[-20%] top-[-20%] w-32 h-32 bg-emerald-500/20 rounded-full blur-[40px]"></div>
+                <div className="bg-emerald-500/20 w-12 h-12 rounded-2xl flex items-center justify-center mb-4">
+                  <IndianRupee className="w-6 h-6 text-emerald-300" />
+                </div>
+                <p className="text-xs text-emerald-300 uppercase font-bold tracking-[0.2em] mb-1">Total Lifetime Earnings</p>
+                <p className="text-5xl font-black text-white flex items-center">
+                  ₹{driverStats.totalEarnings || 0}
+                </p>
+              </div>
+            </div>
+
+            {/* Ride History Table */}
+            <div className="lg:col-span-8 bg-white/5 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden">
+              <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-6">
+                <h3 className="text-xl font-bold text-white flex items-center">
+                  <History className="w-5 h-5 mr-3 text-slate-400" /> Recent Activity
+                </h3>
+              </div>
+
+              {(!driverStats.rideHistory || driverStats.rideHistory.length === 0) ? (
+                <div className="text-center py-12 text-slate-500">
+                  <History className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p>No completed rides yet. Go online to start earning!</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="pb-4 text-[10px] uppercase tracking-widest text-slate-500 font-bold">Date & Time</th>
+                        <th className="pb-4 text-[10px] uppercase tracking-widest text-slate-500 font-bold">Route</th>
+                        <th className="pb-4 text-[10px] uppercase tracking-widest text-slate-500 font-bold">Passenger</th>
+                        <th className="pb-4 text-[10px] uppercase tracking-widest text-slate-500 font-bold">Fare</th>
+                        <th className="pb-4 text-[10px] uppercase tracking-widest text-slate-500 font-bold">Rating</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {driverStats.rideHistory.map((ride: any) => (
+                        <tr key={ride.id} className="hover:bg-white/5 transition-colors group">
+                          <td className="py-5 text-sm text-slate-300">
+                            {new Date(ride.completedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td className="py-5">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs font-bold text-emerald-400">{ride.pickupLocation}</span>
+                              <span className="text-xs text-slate-500">&darr;</span>
+                              <span className="text-xs font-bold text-rose-400">{ride.dropLocation}</span>
+                            </div>
+                          </td>
+                          <td className="py-5 text-sm font-medium text-white">{ride.passenger?.name || 'Unknown'}</td>
+                          <td className="py-5 text-sm font-bold text-emerald-300">₹{ride.fare || 150}</td>
+                          <td className="py-5">
+                            {ride.feedback ? (
+                              <div className="flex items-center gap-1 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 inline-flex">
+                                <span className="text-amber-400 font-bold text-xs">{ride.feedback.rating}</span>
+                                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-600 italic">No rating</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

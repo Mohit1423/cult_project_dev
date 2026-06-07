@@ -5,6 +5,7 @@ import { socket } from '@/lib/socket';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LogOut, MapPin, Navigation, Loader2, CheckCircle2, CarFront, Star, Sparkles } from 'lucide-react';
+import MapWrapper from '@/components/MapWrapper';
 
 export default function PassengerDashboard() {
   const { user, token, logout, isAuthenticated } = useAuthStore();
@@ -16,6 +17,10 @@ export default function PassengerDashboard() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [error, setError] = useState('');
   const [ratings, setRatings] = useState<Record<string, number>>({});
+  
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [minDateTime, setMinDateTime] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -23,6 +28,11 @@ export default function PassengerDashboard() {
     } else if (token) {
       connect(token);
     }
+    
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    setMinDateTime(now.toISOString().slice(0, 16));
+    
     return () => disconnect();
   }, [isAuthenticated, router, token, connect, disconnect]);
 
@@ -33,18 +43,57 @@ export default function PassengerDashboard() {
   const handleRequestRide = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pickup || !dropoff) return;
+    
+    if (isScheduled) {
+      if (!scheduledDate) {
+        setError('Please select a date and time for your scheduled ride.');
+        return;
+      }
+      const selectedTime = new Date(scheduledDate).getTime();
+      const now = new Date().getTime();
+      if (selectedTime < now) {
+        setError('Cannot schedule a ride in the past. Please select a future time.');
+        return;
+      }
+    }
+    
     setIsRequesting(true);
     setError('');
     
-    socket.emit('request_ride', { pickupLocation: pickup, dropoffLocation: dropoff }, (res: any) => {
+    socket.emit('request_ride', { 
+      pickupLocation: pickup, 
+      dropoffLocation: dropoff,
+      scheduledAt: isScheduled ? scheduledDate : null 
+    }, (res: any) => {
       if (res && res.success) {
         addActiveRide(res.ride);
         setPickup('');
         setDropoff('');
+        setIsScheduled(false);
+        setScheduledDate('');
       } else {
         setError(res?.error || 'Failed to request ride');
       }
       setIsRequesting(false);
+    });
+  };
+
+  const handleCancelRide = (rideId: string) => {
+    socket.emit('cancel_ride', { rideId }, (res: any) => {
+      if (!res || !res.success) {
+        alert(res?.error || 'Failed to cancel ride');
+      }
+    });
+  };
+
+  const handleSubmitFeedback = (rideId: string) => {
+    const rating = ratings[rideId] || 5;
+    socket.emit('submit_feedback', { rideId, rating, comment: '' }, (res: any) => {
+      if (res && res.success) {
+        removeActiveRide(rideId);
+      } else {
+        alert(res?.error || 'Failed to submit feedback');
+      }
     });
   };
 
@@ -138,19 +187,52 @@ export default function PassengerDashboard() {
                     required
                   />
                 </div>
+                
+                <div className="flex items-center gap-3 pt-2 pb-2">
+                  <input 
+                    type="checkbox" 
+                    id="scheduleToggle" 
+                    checked={isScheduled} 
+                    onChange={(e) => setIsScheduled(e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-black/20 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                  />
+                  <label htmlFor="scheduleToggle" className="text-sm font-medium text-indigo-200 cursor-pointer">
+                    Schedule for later
+                  </label>
+                </div>
+
+                {isScheduled && (
+                  <div className="animate-in slide-in-from-top-2 duration-300">
+                    <label className="block text-[10px] font-bold text-amber-300/70 uppercase tracking-[0.15em] mb-2 pl-1">Select Date & Time</label>
+                    <input 
+                      type="datetime-local" 
+                      value={scheduledDate}
+                      min={minDateTime}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      className="w-full px-5 py-4 bg-amber-500/10 text-white rounded-2xl border border-amber-500/30 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all"
+                      required={isScheduled}
+                    />
+                  </div>
+                )}
+
                 <button 
                   type="submit" 
-                  disabled={isRequesting || activeDriverCount === 0}
+                  disabled={isRequesting || (activeDriverCount === 0 && !isScheduled)}
                   className="w-full py-5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-bold transition-all disabled:opacity-50 disabled:grayscale flex justify-center items-center mt-4 shadow-[0_0_30px_rgba(99,102,241,0.3)] hover:shadow-[0_0_40px_rgba(99,102,241,0.5)] transform hover:-translate-y-1 active:translate-y-0"
                 >
-                  {isRequesting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Summon Driver'}
+                  {isRequesting ? <Loader2 className="w-6 h-6 animate-spin" /> : (isScheduled ? 'Schedule Ride' : 'Summon Driver')}
                 </button>
               </form>
             </div>
           </div>
           
-          {/* Right Column: Active Rides */}
-          <div className="lg:col-span-8">
+          {/* Right Column: Live Map & Active Rides */}
+          <div className="col-span-12 lg:col-span-8 flex flex-col gap-8">
+            {/* Live Map Box */}
+            <div className="w-full h-[400px] bg-slate-800/40 border border-white/10 rounded-[2rem] p-2 relative shadow-2xl overflow-hidden">
+              <MapWrapper />
+            </div>
+
             {activeRides.length === 0 ? (
               <div className="bg-white/5 backdrop-blur-xl p-12 rounded-[2rem] border border-white/10 border-dashed h-full flex flex-col justify-center items-center text-center text-white/40">
                 <div className="bg-white/5 p-6 rounded-full mb-6">
@@ -167,7 +249,27 @@ export default function PassengerDashboard() {
                     {/* Glossy Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
 
-                    {ride.status === 'REQUESTED' ? (
+                    {ride.status === 'SCHEDULED' ? (
+                      <div className="flex-1 text-center py-8">
+                        <div className="bg-gradient-to-br from-amber-400 to-orange-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(251,191,36,0.5)] border-2 border-white/20">
+                          <CheckCircle2 className="w-10 h-10 text-white" />
+                        </div>
+                        <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Ride Scheduled!</h2>
+                        <p className="text-sm font-bold text-amber-300/70 uppercase tracking-[0.2em] mb-4">
+                          {new Date(ride.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        </p>
+                        <p className="text-sm font-medium text-amber-100 mb-6 bg-amber-500/10 inline-block px-4 py-2 rounded-full border border-amber-500/20">
+                          {ride.pickupLocation} <span className="mx-2 text-white/30">&rarr;</span> {ride.dropLocation}
+                        </p>
+                        <p className="text-xs text-white/40 mb-6">Waiting for a driver to accept it...</p>
+                        <button 
+                          onClick={() => handleCancelRide(ride.id)}
+                          className="px-6 py-2 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-xl font-bold hover:bg-rose-500/20 transition-all text-sm"
+                        >
+                          Cancel Ride
+                        </button>
+                      </div>
+                    ) : ride.status === 'REQUESTED' ? (
                       <div className="flex-1 text-center py-8">
                         <div className="relative w-24 h-24 mx-auto mb-8">
                           <div className="absolute inset-0 bg-indigo-500 rounded-full animate-ping opacity-30"></div>
@@ -179,6 +281,12 @@ export default function PassengerDashboard() {
                         <p className="text-sm font-medium text-indigo-200 mb-6 bg-black/20 inline-block px-4 py-2 rounded-full border border-white/5">
                           {ride.pickupLocation} <span className="mx-2 text-white/30">&rarr;</span> {ride.dropLocation}
                         </p>
+                        <button 
+                          onClick={() => handleCancelRide(ride.id)}
+                          className="px-6 py-2 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-xl font-bold hover:bg-rose-500/20 transition-all text-sm"
+                        >
+                          Cancel Request
+                        </button>
                       </div>
                     ) : ride.status === 'COMPLETED' ? (
                       <div className="flex-1 text-center py-6">
@@ -201,7 +309,7 @@ export default function PassengerDashboard() {
                             ))}
                           </div>
                           <button 
-                            onClick={() => removeActiveRide(ride.id)}
+                            onClick={() => handleSubmitFeedback(ride.id)}
                             className="w-full py-4 bg-white text-slate-900 rounded-xl font-black tracking-wide hover:bg-slate-200 transition-all shadow-lg transform hover:-translate-y-1"
                           >
                             Submit Feedback
