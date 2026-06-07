@@ -34,15 +34,30 @@ export default function DriverDashboard() {
     return () => disconnect();
   }, [isAuthenticated, router, token, connect, disconnect]);
 
-  const toggleOnlineStatus = () => {
+  const handleToggleOnline = () => {
     if (isOnline) {
       socket.emit('driver_go_offline', (res: any) => {
-        if (res && res.success) setIsOnline(false);
+        if (res?.success) setIsOnline(false);
       });
     } else {
-      socket.emit('driver_go_online', (res: any) => {
-        if (res && res.success) setIsOnline(true);
-      });
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            socket.emit('driver_go_online', { lat: pos.coords.latitude, lng: pos.coords.longitude }, (res: any) => {
+              if (res?.success) setIsOnline(true);
+            });
+          },
+          (err) => {
+            socket.emit('driver_go_online', {}, (res: any) => {
+              if (res?.success) setIsOnline(true);
+            });
+          }
+        );
+      } else {
+        socket.emit('driver_go_online', {}, (res: any) => {
+          if (res?.success) setIsOnline(true);
+        });
+      }
     }
   };
 
@@ -190,7 +205,7 @@ export default function DriverDashboard() {
           <div className="lg:col-span-4 bg-white/5 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 shadow-2xl flex flex-col items-center justify-center min-h-[300px]">
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mb-8">Duty Status</h3>
             <button
-              onClick={toggleOnlineStatus}
+              onClick={handleToggleOnline}
               className={`w-48 h-48 rounded-full flex flex-col items-center justify-center transition-all duration-500 transform hover:scale-105 active:scale-95 border-4 ${
                 isOnline 
                   ? 'bg-gradient-to-br from-emerald-400 to-teal-500 border-emerald-300/50 shadow-[0_0_60px_rgba(52,211,153,0.6)]' 

@@ -120,13 +120,30 @@ export function initializeSockets(io: Server) {
       socket.join('passengers');
     }
 
-    socket.on('driver_go_online', async (callback) => {
+    socket.on('driver_go_online', async (data, callback) => {
+      let payload = data;
+      let cb = callback;
+      if (typeof data === 'function') {
+        cb = data;
+        payload = {};
+      }
+
       fs.appendFileSync('socket-debug.log', `--- RECEIVED driver_go_online from ${user.id} ---\n`);
       if (user.role !== 'DRIVER') return;
       try {
         fs.appendFileSync('socket-debug.log', `Updating DB...\n`);
         await prisma.user.update({ where: { id: user.id }, data: { isOnline: true } });
         onlineDrivers.set(user.id, true);
+        
+        if (payload && payload.lat && payload.lng) {
+          driverLocations.set(user.id, { lat: payload.lat, lng: payload.lng });
+        } else {
+          driverLocations.set(user.id, {
+            lat: IITR_CENTER.lat + (Math.random() - 0.5) * 0.01,
+            lng: IITR_CENTER.lng + (Math.random() - 0.5) * 0.01
+          });
+        }
+
         fs.appendFileSync('socket-debug.log', `Joining room...\n`);
         socket.join('online_drivers');
         fs.appendFileSync('socket-debug.log', `Emitting status...\n`);
@@ -139,10 +156,10 @@ export function initializeSockets(io: Server) {
         socket.emit('initial_pending_rides', pendingRides);
         
         fs.appendFileSync('socket-debug.log', `Firing callback...\n`);
-        if (typeof callback === 'function') callback({ success: true });
+        if (typeof cb === 'function') cb({ success: true });
       } catch (err: any) {
         fs.appendFileSync('socket-debug.log', `Error: ${err.message}\n`);
-        if (typeof callback === 'function') callback({ success: false, error: err.message });
+        if (typeof cb === 'function') cb({ success: false, error: err.message });
       }
     });
 
