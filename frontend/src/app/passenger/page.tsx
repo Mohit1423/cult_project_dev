@@ -1,6 +1,6 @@
 'use client';
 import { useAuthStore } from '@/store/authStore';
-import { useSocketStore } from '@/store/socketStore';
+import { useSocketStore, Ride } from '@/store/socketStore';
 import { socket } from '@/lib/socket';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -42,11 +42,16 @@ export default function PassengerDashboard() {
       connect(token);
     }
     
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    setMinDateTime(now.toISOString().slice(0, 16));
+    const timer = setTimeout(() => {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      setMinDateTime(now.toISOString().slice(0, 16));
+    }, 0);
     
-    return () => disconnect();
+    return () => {
+      clearTimeout(timer);
+      disconnect();
+    };
   }, [isAuthenticated, router, token, connect, disconnect]);
 
   if (!user) return null;
@@ -61,7 +66,7 @@ export default function PassengerDashboard() {
         return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
       }
       return null;
-    } catch (e) {
+    } catch {
       return null;
     }
   };
@@ -106,8 +111,8 @@ export default function PassengerDashboard() {
       dropoffLat: dropoffCoords.lat,
       dropoffLng: dropoffCoords.lng,
       scheduledAt: isScheduled ? scheduledDate : null 
-    }, (res: any) => {
-      if (res && res.success) {
+    }, (res: { success?: boolean, error?: string, ride?: Ride }) => {
+      if (res && res.success && res.ride) {
         addActiveRide(res.ride);
         setPickup('');
         setDropoff('');
@@ -121,7 +126,7 @@ export default function PassengerDashboard() {
   };
 
   const handleCancelRide = (rideId: string) => {
-    socket.emit('cancel_ride', { rideId }, (res: any) => {
+    socket.emit('cancel_ride', { rideId }, (res: { success?: boolean, error?: string }) => {
       if (!res || !res.success) {
         alert(res?.error || 'Failed to cancel ride');
       }
@@ -130,7 +135,7 @@ export default function PassengerDashboard() {
 
   const handleSubmitFeedback = (rideId: string) => {
     const rating = ratings[rideId] || 5;
-    socket.emit('submit_feedback', { rideId, rating, comment: '' }, (res: any) => {
+    socket.emit('submit_feedback', { rideId, rating, comment: '' }, (res: { success?: boolean, error?: string }) => {
       if (res && res.success) {
         removeActiveRide(rideId);
       } else {
@@ -298,7 +303,7 @@ export default function PassengerDashboard() {
                         </div>
                         <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Ride Scheduled!</h2>
                         <p className="text-sm font-bold text-amber-300/70 uppercase tracking-[0.2em] mb-4">
-                          {new Date(ride.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                          {new Date(ride.scheduledAt as string | number | Date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                         </p>
                         <p className="text-sm font-medium text-amber-100 mb-4 bg-amber-500/10 inline-block px-4 py-2 rounded-full border border-amber-500/20">
                           {ride.pickupLocation} <span className="mx-2 text-white/30">&rarr;</span> {ride.dropLocation}
@@ -369,7 +374,7 @@ export default function PassengerDashboard() {
                           <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Driver Assigned!</h2>
                           
                           {(() => {
-                            const driverLoc = driverLocations[ride.driverId];
+                            const driverLoc = ride.driverId ? driverLocations[ride.driverId] : null;
                             const distanceMeters = driverLoc && ride.pickupLat && ride.pickupLng 
                               ? calculateDistance(driverLoc.lat, driverLoc.lng, ride.pickupLat, ride.pickupLng) 
                               : null;

@@ -6,20 +6,30 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Enums removed for SQLite compatibility. 
-// Role: "PASSENGER" | "DRIVER"
-// RideStatus: "REQUESTED" | "ACCEPTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+enum Role {
+  PASSENGER
+  DRIVER
+}
+
+enum RideStatus {
+  REQUESTED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  SCHEDULED
+}
 
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
   name      String
-  role      String
+  role      Role
   phone     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -50,7 +60,7 @@ model Ride {
   passenger       User       @relation("PassengerRides", fields: [passengerId], references: [id])
   driverId        String?
   driver          User?      @relation("DriverRides", fields: [driverId], references: [id])
-  status          String     @default("REQUESTED")
+  status          RideStatus @default(REQUESTED)
   pickupLocation  String
   pickupLat       Float?
   pickupLng       Float?

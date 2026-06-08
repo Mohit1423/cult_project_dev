@@ -25,8 +25,9 @@ export default function LoginPage() {
       const res = await api.post('/auth/login', { email, password });
       login(res.data.token, res.data.user);
       router.push(res.data.user.role === 'DRIVER' ? '/driver' : '/passenger');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Invalid credentials');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      setError(axiosErr.response?.data?.error || 'Invalid credentials');
     } finally {
       setLoading(false);
     }
@@ -105,7 +106,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-8 text-center text-sm text-gray-400">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <a href="/register" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors">
             Register here
           </a>

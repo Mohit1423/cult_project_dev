@@ -1,0 +1,350 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.connectedUsers = void 0;
+exports.initializeSockets = initializeSockets;
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const index_1 = require("../index");
+const fs_1 = __importDefault(require("fs"));
+exports.connectedUsers = new Map();
+const onlineDrivers = new Map();
+const driverLocations = new Map();
+const IITR_CENTER = { lat: 29.8649, lng: 77.8966 };
+function initializeSockets(io) {
+    setInterval(() => {
+        if (onlineDrivers.size > 0) {
+            const locations = {};
+            for (const driverId of onlineDrivers.keys()) {
+                let loc = driverLocations.get(driverId);
+                if (!loc) {
+                    loc = {
+                        lat: IITR_CENTER.lat + (Math.random() - 0.5) * 0.01,
+                        lng: IITR_CENTER.lng + (Math.random() - 0.5) * 0.01
+                    };
+                }
+                else {
+                    loc.lat += (Math.random() - 0.5) * 0.0005;
+                    loc.lng += (Math.random() - 0.5) * 0.0005;
+                }
+                driverLocations.set(driverId, loc);
+                locations[driverId] = loc;
+            }
+            io.emit('all_driver_locations', locations);
+        }
+    }, 1000);
+    io.use((socket, next) => {
+        const token = socket.handshake.auth.token;
+        if (!token)
+            return next(new Error('Authentication error'));
+        jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'secret123', (err, decoded) => {
+            if (err)
+                return next(new Error('Authentication error'));
+            socket.data.user = decoded;
+            next();
+        });
+    });
+    io.on('connection', (socket) => __awaiter(this, void 0, void 0, function* () {
+        const user = socket.data.user;
+        exports.connectedUsers.set(socket.id, {
+            socketId: socket.id,
+            userId: user.id,
+            role: user.role
+        });
+        console.log(`User connected via Socket.IO: ${user.id} (${user.role})`);
+        const onlineDriversList = yield index_1.prisma.user.findMany({
+            where: { role: 'DRIVER', isOnline: true },
+            select: { id: true }
+        });
+        socket.emit('initial_drivers_state', onlineDriversList.map(d => d.id));
+        let activeRides = [];
+        if (user.role === 'PASSENGER') {
+            activeRides = yield index_1.prisma.ride.findMany({
+                where: { passengerId: user.id, status: { in: ['REQUESTED', 'SCHEDULED', 'ACCEPTED', 'IN_PROGRESS'] } },
+                include: { driver: { select: { name: true, phone: true } } }
+            });
+        }
+        else if (user.role === 'DRIVER') {
+            const stats = yield index_1.prisma.ride.aggregate({
+                where: { driverId: user.id, status: 'COMPLETED' },
+                _count: { id: true }
+            });
+            const feedbacks = yield index_1.prisma.feedback.findMany({
+                where: { ride: { driverId: user.id } },
+                select: { rating: true }
+            });
+            const avgRating = feedbacks.length > 0
+                ? feedbacks.reduce((acc, curr) => acc + curr.rating, 0) / feedbacks.length
+                : 0;
+            // Fetch History and Earnings
+            const rideHistory = yield index_1.prisma.ride.findMany({
+                where: { driverId: user.id, status: 'COMPLETED' },
+                orderBy: { completedAt: 'desc' },
+                take: 10,
+                include: { passenger: { select: { name: true } }, feedback: { select: { rating: true, comment: true } } }
+            });
+            const totalEarnings = rideHistory.reduce((acc, curr) => acc + (curr.fare || 0), 0);
+            socket.emit('initial_driver_stats', {
+                totalRides: stats._count.id,
+                averageRating: avgRating,
+                totalEarnings,
+                rideHistory
+            });
+            activeRides = yield index_1.prisma.ride.findMany({
+                where: { driverId: user.id, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+                include: { passenger: { select: { name: true, phone: true } } }
+            });
+        }
+        if (activeRides.length > 0) {
+            socket.emit('restore_active_rides', activeRides);
+        }
+        if (user.role === 'DRIVER') {
+            const driver = yield index_1.prisma.user.findUnique({ where: { id: user.id } });
+            if (driver === null || driver === void 0 ? void 0 : driver.isOnline) {
+                onlineDrivers.set(user.id, true);
+                socket.join('online_drivers');
+                io.emit('driver_status_change', { driverId: user.id, isOnline: true });
+            }
+        }
+        else {
+            socket.join('passengers');
+        }
+        socket.on('driver_go_online', (data, callback) => __awaiter(this, void 0, void 0, function* () {
+            let payload = data;
+            let cb = callback;
+            if (typeof data === 'function') {
+                cb = data;
+                payload = {};
+            }
+            fs_1.default.appendFileSync('socket-debug.log', `--- RECEIVED driver_go_online from ${user.id} ---\n`);
+            if (user.role !== 'DRIVER')
+                return;
+            try {
+                fs_1.default.appendFileSync('socket-debug.log', `Updating DB...\n`);
+                yield index_1.prisma.user.update({ where: { id: user.id }, data: { isOnline: true } });
+                onlineDrivers.set(user.id, true);
+                if (payload && payload.lat && payload.lng) {
+                    driverLocations.set(user.id, { lat: payload.lat, lng: payload.lng });
+                }
+                else {
+                    driverLocations.set(user.id, {
+                        lat: IITR_CENTER.lat + (Math.random() - 0.5) * 0.01,
+                        lng: IITR_CENTER.lng + (Math.random() - 0.5) * 0.01
+                    });
+                }
+                fs_1.default.appendFileSync('socket-debug.log', `Joining room...\n`);
+                socket.join('online_drivers');
+                fs_1.default.appendFileSync('socket-debug.log', `Emitting status...\n`);
+                io.emit('driver_status_change', { driverId: user.id, isOnline: true });
+                const pendingRides = yield index_1.prisma.ride.findMany({
+                    where: { status: { in: ['REQUESTED', 'SCHEDULED'] } },
+                    include: { passenger: { select: { name: true, phone: true } } }
+                });
+                socket.emit('initial_pending_rides', pendingRides);
+                fs_1.default.appendFileSync('socket-debug.log', `Firing callback...\n`);
+                if (typeof cb === 'function')
+                    cb({ success: true });
+            }
+            catch (err) {
+                fs_1.default.appendFileSync('socket-debug.log', `Error: ${err.message}\n`);
+                if (typeof cb === 'function')
+                    cb({ success: false, error: err.message });
+            }
+        }));
+        socket.on('driver_go_offline', (callback) => __awaiter(this, void 0, void 0, function* () {
+            if (user.role !== 'DRIVER')
+                return;
+            try {
+                yield index_1.prisma.user.update({ where: { id: user.id }, data: { isOnline: false } });
+                onlineDrivers.delete(user.id);
+                driverLocations.delete(user.id);
+                socket.leave('online_drivers');
+                io.emit('driver_status_change', { driverId: user.id, isOnline: false });
+                if (callback)
+                    callback({ success: true });
+            }
+            catch (err) {
+                if (callback)
+                    callback({ success: false, error: err.message });
+            }
+        }));
+        socket.on('disconnect', () => __awaiter(this, void 0, void 0, function* () {
+            console.log(`User disconnected: ${user.id}`);
+            exports.connectedUsers.delete(socket.id);
+            if (user.role === 'DRIVER') {
+                try {
+                    yield index_1.prisma.user.update({ where: { id: user.id }, data: { isOnline: false } });
+                    onlineDrivers.delete(user.id);
+                    driverLocations.delete(user.id);
+                    io.emit('driver_status_change', { driverId: user.id, isOnline: false });
+                }
+                catch (e) { }
+            }
+        }));
+        socket.on('request_ride', (data, callback) => __awaiter(this, void 0, void 0, function* () {
+            if (user.role !== 'PASSENGER')
+                return;
+            try {
+                const { pickupLocation, pickupLat, pickupLng, dropoffLocation, dropoffLat, dropoffLng, scheduledAt } = data;
+                if (scheduledAt) {
+                    const scheduledTime = new Date(scheduledAt).getTime();
+                    const now = new Date().getTime();
+                    if (scheduledTime < now) {
+                        if (typeof callback === 'function')
+                            callback({ success: false, error: 'Cannot schedule a ride in the past.' });
+                        return;
+                    }
+                }
+                const status = scheduledAt ? 'SCHEDULED' : 'REQUESTED';
+                // Calculate Fare: Distance in km * 10 (minimum ₹20)
+                let calculatedFare = 50; // default fallback
+                if (pickupLat && pickupLng && dropoffLat && dropoffLng) {
+                    const R = 6371e3;
+                    const p1 = pickupLat * Math.PI / 180;
+                    const p2 = dropoffLat * Math.PI / 180;
+                    const dp = (dropoffLat - pickupLat) * Math.PI / 180;
+                    const dl = (dropoffLng - pickupLng) * Math.PI / 180;
+                    const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    const distanceMeters = R * c;
+                    calculatedFare = Math.max(20, Math.round((distanceMeters / 1000) * 10));
+                }
+                const ride = yield index_1.prisma.ride.create({
+                    data: {
+                        passengerId: user.id,
+                        pickupLocation,
+                        pickupLat,
+                        pickupLng,
+                        dropLocation: dropoffLocation,
+                        dropLat: dropoffLat,
+                        dropLng: dropoffLng,
+                        fare: calculatedFare,
+                        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+                        status
+                    },
+                    include: { passenger: { select: { name: true, phone: true } } }
+                });
+                // Broadcast to all online drivers
+                io.to('online_drivers').emit('new_ride_request', ride);
+                if (typeof callback === 'function')
+                    callback({ success: true, ride });
+            }
+            catch (err) {
+                if (typeof callback === 'function')
+                    callback({ success: false, error: err.message });
+            }
+        }));
+        // Driver Acceptance Logic
+        socket.on('accept_ride', (data, callback) => __awaiter(this, void 0, void 0, function* () {
+            if (user.role !== 'DRIVER')
+                return;
+            try {
+                const { rideId } = data;
+                const ride = yield index_1.prisma.ride.findFirst({
+                    where: { id: rideId, status: 'REQUESTED' }
+                });
+                if (!ride) {
+                    if (typeof callback === 'function')
+                        callback({ success: false, error: 'Ride is no longer available or already accepted.' });
+                    return;
+                }
+                const updatedRide = yield index_1.prisma.ride.update({
+                    where: { id: rideId },
+                    data: {
+                        driverId: user.id,
+                        status: 'ACCEPTED'
+                    },
+                    include: { driver: { select: { name: true, phone: true } } }
+                });
+                // Notify the specific passenger
+                const passengerSocket = [...exports.connectedUsers.values()].find(u => u.userId === updatedRide.passengerId);
+                if (passengerSocket) {
+                    io.to(passengerSocket.socketId).emit('ride_accepted', updatedRide);
+                }
+                // Notify all other drivers to remove it from their dashboards
+                io.to('online_drivers').emit('ride_removed', { rideId });
+                if (typeof callback === 'function')
+                    callback({ success: true, ride: updatedRide });
+            }
+            catch (err) {
+                if (typeof callback === 'function')
+                    callback({ success: false, error: err.message });
+            }
+        }));
+        // Driver Completion Logic
+        socket.on('complete_ride', (data, callback) => __awaiter(this, void 0, void 0, function* () {
+            if (user.role !== 'DRIVER')
+                return;
+            try {
+                const { rideId } = data;
+                const updatedRide = yield index_1.prisma.ride.update({
+                    where: { id: rideId, driverId: user.id },
+                    data: { status: 'COMPLETED', completedAt: new Date() },
+                    include: { driver: { select: { name: true, phone: true } } }
+                });
+                const passengerSocket = [...exports.connectedUsers.values()].find(u => u.userId === updatedRide.passengerId);
+                if (passengerSocket) {
+                    io.to(passengerSocket.socketId).emit('ride_completed', updatedRide);
+                }
+                if (typeof callback === 'function')
+                    callback({ success: true, ride: updatedRide });
+            }
+            catch (err) {
+                if (typeof callback === 'function')
+                    callback({ success: false, error: err.message });
+            }
+        }));
+        // Cancel Ride
+        socket.on('cancel_ride', (data, callback) => __awaiter(this, void 0, void 0, function* () {
+            if (user.role !== 'PASSENGER')
+                return;
+            try {
+                const { rideId } = data;
+                const ride = yield index_1.prisma.ride.update({
+                    where: { id: rideId, passengerId: user.id },
+                    data: { status: 'CANCELLED' }
+                });
+                io.to('online_drivers').emit('ride_removed', { rideId });
+                socket.emit('ride_cancelled', { rideId });
+                if (typeof callback === 'function')
+                    callback({ success: true });
+            }
+            catch (err) {
+                if (typeof callback === 'function')
+                    callback({ success: false, error: err.message });
+            }
+        }));
+        // Submit Feedback
+        socket.on('submit_feedback', (data, callback) => __awaiter(this, void 0, void 0, function* () {
+            if (user.role !== 'PASSENGER')
+                return;
+            try {
+                const { rideId, rating, comment } = data;
+                const feedback = yield index_1.prisma.feedback.create({
+                    data: {
+                        rideId,
+                        passengerId: user.id,
+                        rating,
+                        comment
+                    }
+                });
+                if (typeof callback === 'function')
+                    callback({ success: true, feedback });
+            }
+            catch (err) {
+                if (typeof callback === 'function')
+                    callback({ success: false, error: err.message });
+            }
+        }));
+    }));
+}

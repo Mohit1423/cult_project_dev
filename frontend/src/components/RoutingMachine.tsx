@@ -19,9 +19,10 @@ export default function RoutingMachine({ start, end }: RoutingMachineProps) {
     router.route([
       L.Routing.waypoint(L.latLng(start[0], start[1])),
       L.Routing.waypoint(L.latLng(end[0], end[1]))
-    ], (err: any, routes: any) => {
+    // @ts-expect-error - leaflet-routing-machine types are inaccurate
+    ], (err: Error | null, routes: { coordinates: L.LatLng[] }[]) => {
       if (!err && routes && routes.length > 0) {
-        const coords = routes[0].coordinates.map((c: any) => [c.lat, c.lng]);
+        const coords = routes[0].coordinates.map((c: L.LatLng) => [c.lat, c.lng] as [number, number]);
         setRouteCoords(coords);
       }
     });

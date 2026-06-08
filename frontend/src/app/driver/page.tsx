@@ -1,6 +1,6 @@
 'use client';
 import { useAuthStore } from '@/store/authStore';
-import { useSocketStore } from '@/store/socketStore';
+import { useSocketStore, Ride } from '@/store/socketStore';
 import { socket } from '@/lib/socket';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -36,25 +36,25 @@ export default function DriverDashboard() {
 
   const handleToggleOnline = () => {
     if (isOnline) {
-      socket.emit('driver_go_offline', (res: any) => {
+      socket.emit('driver_go_offline', (res: { success?: boolean }) => {
         if (res?.success) setIsOnline(false);
       });
     } else {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            socket.emit('driver_go_online', { lat: pos.coords.latitude, lng: pos.coords.longitude }, (res: any) => {
+            socket.emit('driver_go_online', { lat: pos.coords.latitude, lng: pos.coords.longitude }, (res: { success?: boolean }) => {
               if (res?.success) setIsOnline(true);
             });
           },
-          (err) => {
-            socket.emit('driver_go_online', {}, (res: any) => {
+          () => {
+            socket.emit('driver_go_online', {}, (res: { success?: boolean }) => {
               if (res?.success) setIsOnline(true);
             });
           }
         );
       } else {
-        socket.emit('driver_go_online', {}, (res: any) => {
+        socket.emit('driver_go_online', {}, (res: { success?: boolean }) => {
           if (res?.success) setIsOnline(true);
         });
       }
@@ -63,8 +63,8 @@ export default function DriverDashboard() {
 
   const handleAcceptRide = (rideId: string) => {
     setAcceptingId(rideId);
-    socket.emit('accept_ride', { rideId }, (res: any) => {
-      if (res && res.success) {
+    socket.emit('accept_ride', { rideId }, (res: { success?: boolean, error?: string, ride?: Ride }) => {
+      if (res && res.success && res.ride) {
         addActiveRide(res.ride); // Fix: Add ride to local driver state immediately!
       } else {
         alert(res?.error || 'Failed to accept ride. It may have been taken by someone else.');
@@ -74,7 +74,7 @@ export default function DriverDashboard() {
   };
 
   const handleCompleteRide = (rideId: string) => {
-    socket.emit('complete_ride', { rideId }, (res: any) => {
+    socket.emit('complete_ride', { rideId }, (res: { success?: boolean, error?: string }) => {
       if (res && res.success) {
         removeActiveRide(rideId);
       } else {
@@ -160,7 +160,7 @@ export default function DriverDashboard() {
                     </div>
                     <div className={`${ride.scheduledAt ? 'bg-amber-500/20 border-amber-500/30' : 'bg-emerald-500/20 border-emerald-500/30'} border px-4 py-2 rounded-full flex flex-col items-end`}>
                       <span className={`${ride.scheduledAt ? 'text-amber-300' : 'text-emerald-300'} text-xs font-bold uppercase tracking-wider ${!ride.scheduledAt && 'animate-pulse'}`}>
-                        {ride.scheduledAt ? `UPCOMING: ${new Date(ride.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` : 'In Progress'}
+                        {ride.scheduledAt ? `UPCOMING: ${new Date(ride.scheduledAt as string | number | Date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` : 'In Progress'}
                       </span>
                       {!ride.scheduledAt && (() => {
                         const myLoc = driverLocations[user.id];
@@ -270,7 +270,7 @@ export default function DriverDashboard() {
                           <div className="mt-1 bg-amber-500/20 p-2 rounded-full border border-amber-500/30"><Navigation className="w-4 h-4 text-amber-400" /></div>
                           <div>
                             <p className="text-[10px] text-amber-400 font-bold uppercase tracking-[0.2em] mb-1">Scheduled For</p>
-                            <p className="font-black text-amber-300 text-lg tracking-wide">{new Date(ride.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
+                            <p className="font-black text-amber-300 text-lg tracking-wide">{new Date(ride.scheduledAt as string | number | Date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
                           </div>
                         </div>
                       ) : (
@@ -383,10 +383,10 @@ export default function DriverDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {driverStats.rideHistory.map((ride: any) => (
+                      {driverStats.rideHistory.map((ride: Ride) => (
                         <tr key={ride.id} className="hover:bg-white/5 transition-colors group">
                           <td className="py-5 text-sm text-slate-300">
-                            {new Date(ride.completedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            {ride.completedAt ? new Date(ride.completedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
                           </td>
                           <td className="py-5">
                             <div className="flex flex-col gap-1">

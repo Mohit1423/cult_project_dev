@@ -2,7 +2,7 @@
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
-import { CarFront, Zap, Shield, Map, Clock, Wallet, Navigation, Users } from 'lucide-react';
+import { Zap, Shield, Map, Clock, Wallet, Users } from 'lucide-react';
 
 export default function Home() {
   return (

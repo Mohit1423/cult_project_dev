@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSocketStore } from '@/store/socketStore';
@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import RoutingMachine from './RoutingMachine';
 
 // Fix for default Leaflet markers in React
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -56,7 +56,7 @@ export default function LiveMap() {
   const [center, setCenter] = useState<[number, number]>(IITR_CENTER);
 
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => setMounted(true), 0);
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -67,6 +67,7 @@ export default function LiveMap() {
         }
       );
     }
+    return () => clearTimeout(timer);
   }, []);
 
   if (!mounted) return <div className="w-full h-full bg-slate-900 animate-pulse rounded-[2rem]"></div>;
@@ -102,7 +103,7 @@ export default function LiveMap() {
         ))}
 
         {/* Render Active Ride Points with True Geocoded Coordinates */}
-        {activeRides.length > 0 && activeRides[0].pickupLat && activeRides[0].dropLat && (
+        {activeRides.length > 0 && activeRides[0].pickupLat && activeRides[0].pickupLng && activeRides[0].dropLat && activeRides[0].dropLng && (
           <>
             <Marker position={[activeRides[0].pickupLat, activeRides[0].pickupLng]} icon={pickupIcon}>
               <Popup>Pickup: {activeRides[0].pickupLocation}</Popup>

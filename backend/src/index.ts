@@ -8,18 +8,23 @@ import authRoutes from './routes/auth';
 
 dotenv.config();
 
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL ERROR: JWT_SECRET environment variable is not defined.");
+  process.exit(1);
+}
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: '*', // We will restrict this in production
+    origin: process.env.FRONTEND_URL || '*',
     methods: ['GET', 'POST'],
   },
 });
 
 export const prisma = new PrismaClient();
 
-app.use(cors());
+app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 
