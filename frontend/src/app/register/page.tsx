@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [licensePlate, setLicensePlate] = useState('');
+  const [willingToGoOutside, setWillingToGoOutside] = useState(false);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,6 +35,7 @@ export default function RegisterPage() {
       const payload: Record<string, unknown> = { email, password, name, phone, role };
       if (role === 'DRIVER') {
         payload.vehicle = { make, model, licensePlate };
+        payload.willingToGoOutside = willingToGoOutside;
       }
 
       const res = await api.post('/auth/register', payload);
@@ -120,7 +122,7 @@ export default function RegisterPage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-white/20 rounded-xl leading-5 bg-black/30 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm"
-                  placeholder="+91 9876543210"
+                  placeholder="9876543210"
                   required
                 />
               </div>
@@ -204,6 +206,18 @@ export default function RegisterPage() {
                     required={role === 'DRIVER'}
                   />
                 </div>
+              </div>
+              <div className="flex items-start gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="willingToGoOutsideToggle"
+                  checked={willingToGoOutside}
+                  onChange={(e) => setWillingToGoOutside(e.target.checked)}
+                  className="w-4.5 h-4.5 rounded border-white/20 bg-black/20 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 mt-0.5"
+                />
+                <label htmlFor="willingToGoOutsideToggle" className="text-xs font-semibold text-gray-300 cursor-pointer select-none leading-relaxed">
+                  I am willing to take passengers outside the campus boundaries (e.g. Roorkee Railway Station, Golden Dhaba)
+                </label>
               </div>
             </motion.div>
           )}

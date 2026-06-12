@@ -3,10 +3,12 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+dotenv.config();
+
+import mongoose from 'mongoose';
 import authRoutes from './routes/auth';
 
-dotenv.config();
+
 
 if (!process.env.JWT_SECRET) {
   console.error("FATAL ERROR: JWT_SECRET environment variable is not defined.");
@@ -22,8 +24,9 @@ const io = new Server(httpServer, {
   },
 });
 
-export const prisma = new PrismaClient();
-
+mongoose.connect(process.env.MONGO_URI as string)
+  .then(() => console.log('Connected to MongoDB via Mongoose'))
+  .catch(err => console.error('MongoDB connection error:', err));
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 app.use('/api/auth', authRoutes);
