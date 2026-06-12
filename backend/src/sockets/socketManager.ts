@@ -520,13 +520,24 @@ export function initializeSockets(io: Server) {
         const drivers = await User.find({ role: 'DRIVER' });
         const driverIds = drivers.map(d => d._id);
         
-        const ratings = await Feedback.aggregate([
-          { $match: { driverId: { $in: driverIds } } },
-          { $group: { _id: '$driverId', avgRating: { $avg: '$rating' }, count: { $sum: 1 } } }
+        const driverStatsAgg = await Ride.aggregate([
+          { $match: { driverId: { $in: driverIds }, status: 'COMPLETED' } },
+          { $lookup: {
+              from: 'feedbacks',
+              localField: '_id',
+              foreignField: 'rideId',
+              as: 'feedback'
+          }},
+          { $unwind: { path: '$feedback', preserveNullAndEmptyArrays: true } },
+          { $group: {
+              _id: '$driverId',
+              count: { $sum: 1 },
+              avgRating: { $avg: '$feedback.rating' }
+          }}
         ]);
 
         const ratingMap = new Map();
-        ratings.forEach(r => ratingMap.set(r._id.toString(), { rating: r.avgRating, count: r.count }));
+        driverStatsAgg.forEach(r => ratingMap.set(r._id.toString(), { rating: r.avgRating || 5.0, count: r.count }));
 
         const driverStats = drivers.map(d => {
           const stats = ratingMap.get(d._id.toString()) || { rating: 5, count: 0 };
