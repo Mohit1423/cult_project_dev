@@ -4,7 +4,7 @@
 Cult Ride is a full-stack, real-time ride-sharing application designed exclusively for the IIT Roorkee campus. It connects passengers (students, faculty, staff) with campus drivers instantly, providing live location tracking, fare estimation, and seamless ride management.
 
 ## 🚀 Live Deployment
-> **Deployed Link:** [Insert your deployed link here]
+> **Deployed Link:** [(https://cult-project-dev.vercel.app)]
 
 ## 🎯 Problem Understanding
 The IIT Roorkee campus is vast, and navigating between distant departments, hostels (Bhawans), and gates often requires a dedicated intra-campus commute system. Traditional e-rickshaws lack a unified, real-time booking platform. Cult Ride solves this by providing a reliable, digital dispatch and ride-hailing system tailor-made for IIT Roorkee's geography, ensuring quicker matching of drivers and passengers, upfront fare estimation, and real-time tracking.
