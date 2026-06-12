@@ -224,7 +224,7 @@ export const useSocketStore = create<SocketState>((set) => ({
       }));
     });
 
-    socket.on('driver_arrived', (data: any) => {
+    socket.on('ride_arrived', (data: any) => {
       const rideId = data.id || data._id;
       set((state) => ({
         activeRides: state.activeRides.map(r => (r.id === rideId || (r as any)._id === rideId) ? { ...r, ...data, status: 'ARRIVED' } : r)
