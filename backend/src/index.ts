@@ -19,15 +19,16 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || '*',
-    methods: ['GET', 'POST'],
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true
   },
 });
 
 mongoose.connect((process.env.MONGODB_URI || process.env.MONGO_URI) as string)
   .then(() => console.log('Connected to MongoDB via Mongoose'))
   .catch(err => console.error('MongoDB connection error:', err));
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 
